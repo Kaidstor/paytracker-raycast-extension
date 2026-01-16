@@ -9,7 +9,9 @@ import {
 import { useCachedPromise } from "@raycast/utils";
 import { useState } from "react";
 import {
+  type Counterparty,
   createPayment,
+  getCounterparties,
   getServices,
   getTags,
   type Service,
@@ -29,6 +31,7 @@ interface FormValues {
   description: string;
   serviceId: string;
   tagIds: string[];
+  counterpartyIds: string[];
 }
 
 export default function CreatePayment() {
@@ -38,6 +41,8 @@ export default function CreatePayment() {
   const { data: services, isLoading: servicesLoading } =
     useCachedPromise(getServices);
   const { data: tags, isLoading: tagsLoading } = useCachedPromise(getTags);
+  const { data: counterparties, isLoading: counterpartiesLoading } =
+    useCachedPromise(getCounterparties);
 
   async function handleSubmit(values: FormValues) {
     if (!values.amount || Number.parseFloat(values.amount) <= 0) {
@@ -70,6 +75,7 @@ export default function CreatePayment() {
         description: values.description || undefined,
         serviceId: values.serviceId || null,
         tagIds: values.tagIds || [],
+        counterpartyIds: values.counterpartyIds || [],
       });
       pop();
     } catch (error) {
@@ -85,7 +91,9 @@ export default function CreatePayment() {
 
   return (
     <Form
-      isLoading={isLoading || servicesLoading || tagsLoading}
+      isLoading={
+        isLoading || servicesLoading || tagsLoading || counterpartiesLoading
+      }
       actions={
         <ActionPanel>
           <Action.SubmitForm title="Создать платёж" onSubmit={handleSubmit} />
@@ -137,6 +145,19 @@ export default function CreatePayment() {
         <Form.TagPicker id="tagIds" title="Теги">
           {tags.map((tag: Tag) => (
             <Form.TagPicker.Item key={tag.id} value={tag.id} title={tag.name} />
+          ))}
+        </Form.TagPicker>
+      )}
+
+      {counterparties && counterparties.length > 0 && (
+        <Form.TagPicker id="counterpartyIds" title="Контрагенты">
+          {counterparties.map((cp: Counterparty) => (
+            <Form.TagPicker.Item
+              key={cp.id}
+              value={cp.id}
+              title={cp.name}
+              icon={cp.type === "person" ? "👤" : "🏢"}
+            />
           ))}
         </Form.TagPicker>
       )}

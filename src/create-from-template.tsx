@@ -1,16 +1,27 @@
 import {
   Action,
   ActionPanel,
-  Alert,
   Color,
-  confirmAlert,
+  Form,
   Icon,
   List,
   showToast,
   Toast,
+  useNavigation,
 } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
-import { createPaymentFromTemplate, getTemplates, type Template } from "./api";
+import { useState } from "react";
+import {
+  type Counterparty,
+  createPayment,
+  getCounterparties,
+  getServices,
+  getTags,
+  getTemplates,
+  type Service,
+  type Tag,
+  type Template,
+} from "./api";
 
 function getTypeIcon(type: string | null) {
   if (type === "expense")
@@ -33,38 +44,211 @@ function formatAmount(amount: string | null, currency: string | null): string {
   return `${amount} ${currencySymbol}`;
 }
 
+type PaymentType = "expense" | "income";
+type PaymentStatus = "paid" | "unpaid";
+type Currency = "RUB" | "USD" | "KZT";
+
+interface FormValues {
+  type: PaymentType;
+  status: PaymentStatus;
+  amount: string;
+  currency: Currency;
+  date: Date | null;
+  description: string;
+  serviceId: string;
+  tagIds: string[];
+  counterpartyIds: string[];
+}
+
+function PaymentFormFromTemplate({
+  template,
+  onSuccess,
+}: {
+  template: Template;
+  onSuccess: () => void;
+}) {
+  const { pop } = useNavigation();
+  const [isLoading, setIsLoading] = useState(false);
+
+  const { data: services, isLoading: servicesLoading } =
+    useCachedPromise(getServices);
+  const { data: tags, isLoading: tagsLoading } = useCachedPromise(getTags);
+  const { data: counterparties, isLoading: counterpartiesLoading } =
+    useCachedPromise(getCounterparties);
+
+  async function handleSubmit(values: FormValues) {
+    if (!values.amount || Number.parseFloat(values.amount) <= 0) {
+      await showToast({
+        style: Toast.Style.Failure,
+        title: "Ошибка",
+        message: "Введите корректную сумму",
+      });
+      return;
+    }
+
+    if (!values.date) {
+      await showToast({
+        style: Toast.Style.Failure,
+        title: "Ошибка",
+        message: "Выберите дату",
+      });
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      await createPayment({
+        type: values.type,
+        status: values.status,
+        amount: values.amount,
+        currency: values.currency,
+        date: values.date.toISOString().split("T")[0],
+        description: values.description || undefined,
+        serviceId: values.serviceId || null,
+        tagIds: values.tagIds || [],
+        counterpartyIds: values.counterpartyIds || [],
+      });
+      onSuccess();
+      pop();
+    } catch (error) {
+      await showToast({
+        style: Toast.Style.Failure,
+        title: "Ошибка создания платежа",
+        message: error instanceof Error ? error.message : "Неизвестная ошибка",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  return (
+    <Form
+      navigationTitle={`Платёж: ${template.name}`}
+      isLoading={
+        isLoading || servicesLoading || tagsLoading || counterpartiesLoading
+      }
+      actions={
+        <ActionPanel>
+          <Action.SubmitForm title="Создать платёж" onSubmit={handleSubmit} />
+        </ActionPanel>
+      }
+    >
+      <Form.Description
+        title="Шаблон"
+        text={`${template.name}${template.description ? ` — ${template.description}` : ""}`}
+      />
+
+      <Form.Separator />
+
+      <Form.Dropdown
+        id="type"
+        title="Тип"
+        defaultValue={template.type || "expense"}
+      >
+        <Form.Dropdown.Item value="expense" title="Расход" icon="💸" />
+        <Form.Dropdown.Item value="income" title="Доход" icon="💰" />
+      </Form.Dropdown>
+
+      <Form.Dropdown
+        id="status"
+        title="Статус"
+        defaultValue={template.status || "unpaid"}
+      >
+        <Form.Dropdown.Item value="unpaid" title="Не оплачен" />
+        <Form.Dropdown.Item value="paid" title="Оплачен" />
+      </Form.Dropdown>
+
+      <Form.TextField
+        id="amount"
+        title="Сумма"
+        placeholder="1000"
+        defaultValue={template.amount || ""}
+        autoFocus
+      />
+
+      <Form.Dropdown
+        id="currency"
+        title="Валюта"
+        defaultValue={template.currency || "RUB"}
+      >
+        <Form.Dropdown.Item value="RUB" title="₽ RUB" />
+        <Form.Dropdown.Item value="USD" title="$ USD" />
+        <Form.Dropdown.Item value="KZT" title="₸ KZT" />
+      </Form.Dropdown>
+
+      <Form.DatePicker id="date" title="Дата" defaultValue={new Date()} />
+
+      <Form.Separator />
+
+      <Form.TextArea
+        id="description"
+        title="Описание"
+        placeholder="Описание платежа..."
+        defaultValue={template.description || ""}
+      />
+
+      {services && services.length > 0 && (
+        <Form.Dropdown
+          id="serviceId"
+          title="Сервис"
+          defaultValue={template.serviceId || ""}
+        >
+          <Form.Dropdown.Item value="" title="Без сервиса" />
+          {services.map((service: Service) => (
+            <Form.Dropdown.Item
+              key={service.id}
+              value={service.id}
+              title={service.name}
+            />
+          ))}
+        </Form.Dropdown>
+      )}
+
+      {tags && tags.length > 0 && (
+        <Form.TagPicker
+          id="tagIds"
+          title="Теги"
+          defaultValue={template.tagIds || []}
+        >
+          {tags.map((tag: Tag) => (
+            <Form.TagPicker.Item key={tag.id} value={tag.id} title={tag.name} />
+          ))}
+        </Form.TagPicker>
+      )}
+
+      {counterparties && counterparties.length > 0 && (
+        <Form.TagPicker
+          id="counterpartyIds"
+          title="Контрагенты"
+          defaultValue={template.counterpartyIds || []}
+        >
+          {counterparties.map((cp: Counterparty) => (
+            <Form.TagPicker.Item
+              key={cp.id}
+              value={cp.id}
+              title={cp.name}
+              icon={cp.type === "person" ? "👤" : "🏢"}
+            />
+          ))}
+        </Form.TagPicker>
+      )}
+    </Form>
+  );
+}
+
 export default function CreateFromTemplate() {
+  const { push } = useNavigation();
   const {
     data: templates,
     isLoading,
     revalidate,
   } = useCachedPromise(getTemplates);
 
-  async function handleCreatePayment(template: Template) {
-    const confirmed = await confirmAlert({
-      title: `Создать платёж "${template.name}"?`,
-      message: template.amount
-        ? `${template.type === "expense" ? "Расход" : "Доход"}: ${formatAmount(template.amount, template.currency)}`
-        : "Будет создан платёж по шаблону с сегодняшней датой",
-      primaryAction: {
-        title: "Создать",
-        style: Alert.ActionStyle.Default,
-      },
-    });
-
-    if (!confirmed) return;
-
-    try {
-      await createPaymentFromTemplate(template);
-      revalidate();
-    } catch (error) {
-      await showToast({
-        style: Toast.Style.Failure,
-        title: "Ошибка",
-        message:
-          error instanceof Error ? error.message : "Не удалось создать платёж",
-      });
-    }
+  function handleSelectTemplate(template: Template) {
+    push(
+      <PaymentFormFromTemplate template={template} onSuccess={revalidate} />,
+    );
   }
 
   return (
@@ -73,7 +257,7 @@ export default function CreateFromTemplate() {
         <List.EmptyView
           icon={Icon.Document}
           title="Нет шаблонов"
-          description="Создайте шаблоны в веб-приложении Dopusk"
+          description="Создайте шаблоны в веб-приложении PayTracker"
         />
       ) : (
         templates.map((template: Template) => (
@@ -93,9 +277,9 @@ export default function CreateFromTemplate() {
             actions={
               <ActionPanel>
                 <Action
-                  title="Создать платёж"
-                  icon={Icon.Plus}
-                  onAction={() => handleCreatePayment(template)}
+                  title="Редактировать и создать"
+                  icon={Icon.Pencil}
+                  onAction={() => handleSelectTemplate(template)}
                 />
                 <Action
                   title="Обновить список"

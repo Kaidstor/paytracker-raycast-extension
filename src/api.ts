@@ -15,6 +15,7 @@ export interface Template {
   currency: "RUB" | "USD" | "KZT" | null;
   description: string | null;
   tagIds: string[] | null;
+  counterpartyIds: string[] | null;
 }
 
 export interface Service {
@@ -26,6 +27,12 @@ export interface Tag {
   id: string;
   name: string;
   color: string | null;
+}
+
+export interface Counterparty {
+  id: string;
+  name: string;
+  type: "organization" | "person";
 }
 
 export interface CreatePaymentParams {
@@ -88,6 +95,10 @@ export async function getTags(): Promise<Tag[]> {
   return apiRequest<Tag[]>("/api/tags");
 }
 
+export async function getCounterparties(): Promise<Counterparty[]> {
+  return apiRequest<Counterparty[]>("/api/counterparties");
+}
+
 export async function createPayment(
   params: CreatePaymentParams,
 ): Promise<void> {
@@ -118,6 +129,7 @@ export async function createPaymentFromTemplate(
     date: today,
     description: template.description || undefined,
     tagIds: template.tagIds || [],
+    counterpartyIds: template.counterpartyIds || [],
     ...overrides,
   };
 
