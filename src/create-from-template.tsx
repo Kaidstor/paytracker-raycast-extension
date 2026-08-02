@@ -15,10 +15,8 @@ import {
   type Counterparty,
   createPayment,
   getCounterparties,
-  getServices,
   getTags,
   getTemplates,
-  type Service,
   type Tag,
   type Template,
 } from "./api";
@@ -44,18 +42,15 @@ function formatAmount(amount: string | null, currency: string | null): string {
   return `${amount} ${currencySymbol}`;
 }
 
-type PaymentType = "expense" | "income";
 type PaymentStatus = "paid" | "unpaid";
 type Currency = "RUB" | "USD" | "KZT";
 
 interface FormValues {
-  type: PaymentType;
   status: PaymentStatus;
   amount: string;
   currency: Currency;
   date: Date | null;
   description: string;
-  serviceId: string;
   tagIds: string[];
   counterpartyIds: string[];
 }
@@ -70,14 +65,12 @@ function PaymentFormFromTemplate({
   const { pop } = useNavigation();
   const [isLoading, setIsLoading] = useState(false);
 
-  const { data: services, isLoading: servicesLoading } =
-    useCachedPromise(getServices);
   const { data: tags, isLoading: tagsLoading } = useCachedPromise(getTags);
   const { data: counterparties, isLoading: counterpartiesLoading } =
     useCachedPromise(getCounterparties);
 
   async function handleSubmit(values: FormValues) {
-    if (!values.amount || Number.parseFloat(values.amount) <= 0) {
+    if (!values.amount || Number.parseFloat(values.amount) === 0) {
       await showToast({
         style: Toast.Style.Failure,
         title: "Ошибка",
@@ -99,13 +92,11 @@ function PaymentFormFromTemplate({
 
     try {
       await createPayment({
-        type: values.type,
         status: values.status,
         amount: values.amount,
         currency: values.currency,
-        date: values.date.toISOString().split("T")[0],
+        date: `${values.date.getFullYear()}-${String(values.date.getMonth() + 1).padStart(2, "0")}-${String(values.date.getDate()).padStart(2, "0")}`,
         description: values.description || undefined,
-        serviceId: values.serviceId || null,
         tagIds: values.tagIds || [],
         counterpartyIds: values.counterpartyIds || [],
       });
@@ -125,9 +116,7 @@ function PaymentFormFromTemplate({
   return (
     <Form
       navigationTitle={`Платёж: ${template.name}`}
-      isLoading={
-        isLoading || servicesLoading || tagsLoading || counterpartiesLoading
-      }
+      isLoading={isLoading || tagsLoading || counterpartiesLoading}
       actions={
         <ActionPanel>
           <Action.SubmitForm title="Создать платёж" onSubmit={handleSubmit} />
@@ -142,15 +131,6 @@ function PaymentFormFromTemplate({
       <Form.Separator />
 
       <Form.Dropdown
-        id="type"
-        title="Тип"
-        defaultValue={template.type || "expense"}
-      >
-        <Form.Dropdown.Item value="expense" title="Расход" icon="💸" />
-        <Form.Dropdown.Item value="income" title="Доход" icon="💰" />
-      </Form.Dropdown>
-
-      <Form.Dropdown
         id="status"
         title="Статус"
         defaultValue={template.status || "unpaid"}
@@ -162,8 +142,14 @@ function PaymentFormFromTemplate({
       <Form.TextField
         id="amount"
         title="Сумма"
-        placeholder="1000"
-        defaultValue={template.amount || ""}
+        placeholder="-1000"
+        defaultValue={
+          template.amount
+            ? template.type === "expense" && !template.amount.startsWith("-")
+              ? `-${template.amount}`
+              : template.amount
+            : ""
+        }
         autoFocus
       />
 
@@ -188,51 +174,30 @@ function PaymentFormFromTemplate({
         defaultValue={template.description || ""}
       />
 
-      {services && services.length > 0 && (
-        <Form.Dropdown
-          id="serviceId"
-          title="Сервис"
-          defaultValue={template.serviceId || ""}
-        >
-          <Form.Dropdown.Item value="" title="Без сервиса" />
-          {services.map((service: Service) => (
-            <Form.Dropdown.Item
-              key={service.id}
-              value={service.id}
-              title={service.name}
-            />
-          ))}
-        </Form.Dropdown>
-      )}
+      <Form.TagPicker
+        id="tagIds"
+        title="Теги"
+        defaultValue={template.tagIds || []}
+      >
+        {(tags || []).map((tag: Tag) => (
+          <Form.TagPicker.Item key={tag.id} value={tag.id} title={tag.name} />
+        ))}
+      </Form.TagPicker>
 
-      {tags && tags.length > 0 && (
-        <Form.TagPicker
-          id="tagIds"
-          title="Теги"
-          defaultValue={template.tagIds || []}
-        >
-          {tags.map((tag: Tag) => (
-            <Form.TagPicker.Item key={tag.id} value={tag.id} title={tag.name} />
-          ))}
-        </Form.TagPicker>
-      )}
-
-      {counterparties && counterparties.length > 0 && (
-        <Form.TagPicker
-          id="counterpartyIds"
-          title="Контрагенты"
-          defaultValue={template.counterpartyIds || []}
-        >
-          {counterparties.map((cp: Counterparty) => (
-            <Form.TagPicker.Item
-              key={cp.id}
-              value={cp.id}
-              title={cp.name}
-              icon={cp.type === "person" ? "👤" : "🏢"}
-            />
-          ))}
-        </Form.TagPicker>
-      )}
+      <Form.TagPicker
+        id="counterpartyIds"
+        title="Контрагенты"
+        defaultValue={template.counterpartyIds || []}
+      >
+        {(counterparties || []).map((cp: Counterparty) => (
+          <Form.TagPicker.Item
+            key={cp.id}
+            value={cp.id}
+            title={cp.name}
+            icon={cp.type === "person" ? "👤" : "🏢"}
+          />
+        ))}
+      </Form.TagPicker>
     </Form>
   );
 }

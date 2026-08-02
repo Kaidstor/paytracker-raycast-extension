@@ -9,25 +9,24 @@
 
 type ExtensionPreferences = {
   /** API URL - URL вашего Paytracker сервера */
-  "apiUrl": string,
+  apiUrl: string;
   /** API Token - Токен доступа. Создайте в настройках PayTracker → API токены */
-  "apiToken": string
-}
+  apiToken: string;
+};
 
 /** Preferences accessible in all the extension's commands */
-declare type Preferences = ExtensionPreferences
+declare type Preferences = ExtensionPreferences;
 
 declare namespace Preferences {
   /** Preferences accessible in the `create-payment` command */
-  export type CreatePayment = ExtensionPreferences & {}
+  export type CreatePayment = ExtensionPreferences & {};
   /** Preferences accessible in the `create-from-template` command */
-  export type CreateFromTemplate = ExtensionPreferences & {}
+  export type CreateFromTemplate = ExtensionPreferences & {};
 }
 
 declare namespace Arguments {
   /** Arguments passed to the `create-payment` command */
-  export type CreatePayment = {}
+  export type CreatePayment = {};
   /** Arguments passed to the `create-from-template` command */
-  export type CreateFromTemplate = {}
+  export type CreateFromTemplate = {};
 }
-

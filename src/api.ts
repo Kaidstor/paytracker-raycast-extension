@@ -10,17 +10,11 @@ export interface Template {
   name: string;
   type: "expense" | "income" | null;
   status: "paid" | "unpaid" | null;
-  serviceId: string | null;
   amount: string | null;
   currency: "RUB" | "USD" | "KZT" | null;
   description: string | null;
   tagIds: string[] | null;
   counterpartyIds: string[] | null;
-}
-
-export interface Service {
-  id: string;
-  name: string;
 }
 
 export interface Tag {
@@ -36,9 +30,7 @@ export interface Counterparty {
 }
 
 export interface CreatePaymentParams {
-  type: "expense" | "income";
   status?: "paid" | "unpaid";
-  serviceId?: string | null;
   amount: string;
   currency: "RUB" | "USD" | "KZT";
   date: string;
@@ -84,11 +76,7 @@ async function apiRequest<T>(
 }
 
 export async function getTemplates(): Promise<Template[]> {
-  return apiRequest<Template[]>("/api/v2/templates");
-}
-
-export async function getServices(): Promise<Service[]> {
-  return apiRequest<Service[]>("/api/services");
+  return apiRequest<Template[]>("/api/templates");
 }
 
 export async function getTags(): Promise<Tag[]> {
@@ -107,10 +95,11 @@ export async function createPayment(
     body: JSON.stringify(params),
   });
 
+  const isExpense = Number(params.amount) < 0;
   await showToast({
     style: Toast.Style.Success,
     title: "Платёж создан",
-    message: `${params.type === "expense" ? "Расход" : "Доход"}: ${params.amount} ${params.currency}`,
+    message: `${isExpense ? "Расход" : "Доход"}: ${Math.abs(Number(params.amount))} ${params.currency}`,
   });
 }
 
@@ -120,11 +109,16 @@ export async function createPaymentFromTemplate(
 ): Promise<void> {
   const today = new Date().toISOString().split("T")[0];
 
+  // Шаблоны хранят положительный amount + type, конвертируем в знаковый
+  const templateAmount = template.amount || "0";
+  const signedAmount =
+    template.type === "expense" && !templateAmount.startsWith("-")
+      ? `-${templateAmount}`
+      : templateAmount;
+
   const params: CreatePaymentParams = {
-    type: template.type || "expense",
     status: template.status || "unpaid",
-    serviceId: template.serviceId,
-    amount: template.amount || "0",
+    amount: signedAmount,
     currency: template.currency || "RUB",
     date: today,
     description: template.description || undefined,
